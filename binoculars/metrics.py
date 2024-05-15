@@ -6,6 +6,13 @@ ce_loss_fn = torch.nn.CrossEntropyLoss(reduction="none")
 softmax_fn = torch.nn.Softmax(dim=-1)
 
 
+def perplexity_divided_by_entropy(ppl, individual_entropy):
+    divided_values = []
+    for ppl_value, entropy_value in zip(ppl, individual_entropy):
+        divided_row = [ppl_elem / entropy_elem for ppl_elem, entropy_elem in zip(ppl_value, entropy_value)]
+        divided_values.append(divided_row)
+    return divided_values
+
 def perplexity(encoding: transformers.BatchEncoding,
                logits: torch.Tensor,
                median: bool = False,
@@ -17,14 +24,46 @@ def perplexity(encoding: transformers.BatchEncoding,
     if median:
         ce_nan = (ce_loss_fn(shifted_logits.transpose(1, 2), shifted_labels).
                   masked_fill(~shifted_attention_mask.bool(), float("nan")))
+        individual_ppl = np.exp(np.nanmean(ce_nan.cpu().float().numpy(), axis=1))  # Use nanmean instead of nanmedian
         ppl = np.nanmedian(ce_nan.cpu().float().numpy(), 1)
 
     else:
-        ppl = (ce_loss_fn(shifted_logits.transpose(1, 2), shifted_labels) *
-               shifted_attention_mask).sum(1) / shifted_attention_mask.sum(1)
-        ppl = ppl.to("cpu").float().numpy()
+        ce = ce_loss_fn(shifted_logits.transpose(1, 2), shifted_labels)
+        individual_ppl = np.exp(np.mean(ce.cpu().float().numpy(), axis=1))  # Use mean instead of sum
+        ppl = np.mean(individual_ppl)
+    print("individual_ppl ", individual_ppl)
+    print("ppl ", ppl)
+    return ppl, individual_ppl
 
-    return ppl
+def perplexity(encoding: transformers.BatchEncoding,
+               logits: torch.Tensor,
+               median: bool = False,
+               temperature: float = 1.0):
+    shifted_logits = logits[..., :-1, :].contiguous() / temperature
+    shifted_labels = encoding.input_ids[..., 1:].contiguous()
+    shifted_attention_mask = encoding.attention_mask[..., 1:].contiguous()
+
+    if median:
+        ce_nan = (ce_loss_fn(shifted_logits.transpose(1, 2), shifted_labels).
+                  masked_fill(~shifted_attention_mask.bool(), float("nan")))
+        individual_ppl = ce_nan.cpu().float().numpy()
+        ppl = np.nanmedian(ce_nan.cpu().float().numpy(), 1)
+
+    else:
+        ce = ce_loss_fn(shifted_logits.transpose(1, 2), shifted_labels)
+        individual_ppl = ce.cpu().float().numpy()
+        ppl = (ce * shifted_attention_mask).sum(1) / shifted_attention_mask.sum(1)
+        ppl = ppl.to("cpu").float().numpy()
+    print("individual_ppl ",individual_ppl)
+
+
+    
+    
+    geometric_means = np.exp(np.mean(np.log(individual_ppl), axis=1))
+    # Calculate the overall perplexity by taking the mean of geometric means
+    overall_ppl = np.mean(geometric_means)
+    #print("overall_ppl ", overall_ppl)
+    return ppl, individual_ppl
 
 
 def entropy(p_logits: torch.Tensor,
@@ -50,8 +89,19 @@ def entropy(p_logits: torch.Tensor,
 
     if median:
         ce_nan = ce.masked_fill(~padding_mask.bool(), float("nan"))
+        individual_entropy = ce_nan.cpu().float().numpy()
         agg_ce = np.nanmedian(ce_nan.cpu().float().numpy(), 1)
     else:
+        individual_entropy = ce.cpu().float().numpy()
         agg_ce = (((ce * padding_mask).sum(1) / padding_mask.sum(1)).to("cpu").float().numpy())
 
-    return agg_ce
+    print("individual_entropy ",individual_entropy) 
+    
+    geometric_means = np.exp(np.mean(np.log(individual_entropy), axis=1))
+    # Calculate the overall perplexity by taking the mean of geometric means
+    overall_pplx = np.mean(geometric_means)
+    #print("overall_pplx ", overall_pplx)
+
+    
+    return agg_ce, individual_entropy
+
