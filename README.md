@@ -19,8 +19,8 @@ developed and tested on Python This code was developed and tested with Python 3.
 following commands:
 
 ```bash
-$ git clone https://github.com/ahans30/Binoculars.git
-$ cd Binoculars
+$ git clone https://github.com/SyedHuq28/Binoculars_Syed.git
+$ cd Binoculars_Syed
 $ pip install -e .
 ```
 
