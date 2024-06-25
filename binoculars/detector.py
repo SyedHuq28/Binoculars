@@ -26,7 +26,7 @@ class Binoculars:
                  observer_name_or_path: str = "tiiuae/falcon-rw-1b",
                  performer_name_or_path: str = "tiiuae/falcon-rw-1b",
                  use_bfloat16: bool = True,
-                 max_token_observed: int = 512,
+                 max_token_observed: int = 2000,
                  mode: str = "low-fpr") -> None:
         """
         Initialize the Binoculars class with models, tokenizer, and configuration.
